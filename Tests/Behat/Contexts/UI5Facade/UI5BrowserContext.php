@@ -12,6 +12,7 @@ use exface\Core\DataTypes\StringDataType;
 use exface\Core\DataTypes\UrlDataType;
 use exface\Core\Exceptions\RuntimeException;
 use exface\Core\Factories\UiPageFactory;
+use exface\Core\Factories\FormulaFactory;
 use exface\Core\Interfaces\WorkbenchInterface;
 use PHPUnit\Framework\Assert;
 use Behat\Behat\Hook\Scope\BeforeScenarioScope;
@@ -254,19 +255,27 @@ class UI5BrowserContext extends BehatFormatterContext implements Context
 
     /**
      * Log in to a URL with a specific role and locale
-     * 
+     *
      * Examples:
      * - Given I log in to page "exface.core.logs.html" as "Support"
      * - Given I log in to page "exface.core.logs.html" as "Support, Debugger"
      * - Given I log in to page "exface.core.logs.html" as "Support" with locale "de_DE"
      * - Given I log in to page "exface.core.logs.html" as "exface.Core.SUPERUSER"
-     * 
+     *
      * @Given I log in to the page :url
      * @Given I log in to the page :url as :userRole
      * @Given I log in to the page :url as :userRole with locale :locale
      */
     public function iLogInToPage(string $url, string $userRoles = null, string $userLocale = null)
     {
+        // Parse placeholders in URL, roles, and locale
+        $url = $this->parseArgument($url);
+        if ($userRoles !== null) {
+            $userRoles = $this->parseArgument($userRoles);
+        }
+        if ($userLocale !== null) {
+            $userLocale = $this->parseArgument($userLocale);
+        }
 
         // Setup the user and get the required login data
         $userRolesArray = $this->splitArgument($userRoles);
@@ -283,11 +292,12 @@ class UI5BrowserContext extends BehatFormatterContext implements Context
         // Find the correct authenticator tab. Keep retrying for 5
         $this->getBrowser()->goToTab($tabCaption, null, 5);
 
-        // Fill out the login form
+        // Fill out the login form, parsing placeholders in values
         foreach ($loginFields as $caption => $value) {
             $input = $this->getBrowser()->findInputByCaption($caption);
             Assert::assertNotNull($input, 'Cannot find login field "' . $caption . '"');
-            $input->setValue($value);
+            $parsed = $this->parseArgument($value);
+            $input->setValue($parsed);
         }
 
         // Clear XHR logs before login
@@ -297,7 +307,7 @@ class UI5BrowserContext extends BehatFormatterContext implements Context
         $loginButton = $this->getBrowser()->findButtonByCaption($btnCaption);
         Assert::assertNotNull($loginButton, 'Cannot find login button "' . $btnCaption . '"');
         $loginButton->click();
-        
+
         $this->getBrowser()->getWaitManager()->waitForAppLoaded($url);
     }
 
@@ -1525,6 +1535,38 @@ class UI5BrowserContext extends BehatFormatterContext implements Context
         $array = array_map('trim', $array);
         return $array;
     }
+
+
+    protected function parseArgument(string $arg): string
+    {
+        if ($arg === '' || strpos($arg, '[#=') === false) {
+            return $arg;
+        }
+
+        return preg_replace_callback('/\[#=(.*?)#\]/', function ($m) {
+            $expr = $m[1]; //  Env(\'TEST_ROLES\') or Now()
+
+            // Env('X')
+            if (str_starts_with($expr, "Env(")) {
+                if (preg_match("/Env\\('([^']+)'\\)/", $expr, $match)) {
+                    $envVar = $match[1];
+                    $value = getenv($envVar);
+                    if ($value === false) {
+                        $value = $_ENV[$envVar] ?? '';
+                    }
+                    return $value;
+                }
+            }
+
+            // Now()
+            if (trim($expr) === 'Now()') {
+                return (new \DateTime())->format('Y-m-d\\TH:i:s');
+            }
+
+            throw new \RuntimeException("Not supported placeholder={$expr}");
+        }, $arg);
+    }
+
 
 
     /**
