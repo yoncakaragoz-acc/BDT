@@ -269,13 +269,11 @@ class UI5BrowserContext extends BehatFormatterContext implements Context
     public function iLogInToPage(string $url, string $userRoles = null, string $userLocale = null)
     {
         // Parse placeholders in URL, roles, and locale
-        $url = $this->parseArgument($url);
-        if ($userRoles !== null) {
-            $userRoles = $this->parseArgument($userRoles);
-        }
-        if ($userLocale !== null) {
-            $userLocale = $this->parseArgument($userLocale);
-        }
+        // $url = $this->parseTestRolesArgument($url);
+        // if ($userRoles !== null) {
+        //     $userRoles = $this->parseTestRolesArgument($userRoles);
+        // }
+        
 
         // Setup the user and get the required login data
         $userRolesArray = $this->splitArgument($userRoles);
@@ -296,8 +294,9 @@ class UI5BrowserContext extends BehatFormatterContext implements Context
         foreach ($loginFields as $caption => $value) {
             $input = $this->getBrowser()->findInputByCaption($caption);
             Assert::assertNotNull($input, 'Cannot find login field "' . $caption . '"');
-            $parsed = $this->parseArgument($value);
-            $input->setValue($parsed);
+            $input->setValue($value);
+            // $parsed = $this->parseTestRolesArgument($value);
+            // $input->setValue($parsed);
         }
 
         // Clear XHR logs before login
@@ -561,7 +560,16 @@ class UI5BrowserContext extends BehatFormatterContext implements Context
      */
     public function iEnterInFilter(string $value, string $filterName): void
     {
-        $this->getBrowser()->getFilterByCaption($filterName)->setValue($value);
+        //$this->getBrowser()->getFilterByCaption($filterName)->setValue($value);
+
+        // Resolve Now() placeholder before entering the value
+        $value = $this->parseNowArgument($value);
+
+        // Find the filter by its caption and set the value
+        $this
+            ->getBrowser()
+            ->getFilterByCaption($filterName)
+            ->setValue($value);
     }
 
 
@@ -1537,14 +1545,14 @@ class UI5BrowserContext extends BehatFormatterContext implements Context
     }
 
 
-    protected function parseArgument(string $arg): string
+    protected function parseTestRolesArgument(string $arg): string
     {
         if ($arg === '' || strpos($arg, '[#=') === false) {
             return $arg;
         }
 
         return preg_replace_callback('/\[#=(.*?)#\]/', function ($m) {
-            $expr = $m[1]; //  Env(\'TEST_ROLES\') or Now()
+            $expr = $m[1]; //  Env(\'TEST_ROLES\') 
 
             // Env('X')
             if (str_starts_with($expr, "Env(")) {
@@ -1558,16 +1566,37 @@ class UI5BrowserContext extends BehatFormatterContext implements Context
                 }
             }
 
-            // Now()
-            if (trim($expr) === 'Now()') {
-                return (new \DateTime())->format('Y-m-d\\TH:i:s');
-            }
-
             throw new \RuntimeException("Not supported placeholder={$expr}");
         }, $arg);
     }
 
 
+    /**
+     * Searches for the [#=Now()#] placeholder within the input string and replaces it with the current timestamp.
+     * Throws a RuntimeException if any other placeholder is encountered.
+     *
+     * @param string $arg The raw argument string containing potential placeholders
+     * @return string The argument string with recognized placeholders resolved
+     * @throws \RuntimeException If an unsupported placeholder is encountered
+     */
+    public function parseNowArgument(string $arg): string
+    {
+        return preg_replace_callback(
+            '/\[#=(.+?)#\]/',
+            function (array $matches) use ($arg): string {
+                $expr = trim($matches[1]);
+                if ($expr === 'Now()') {
+                    // Return a DateTime for "now" and format it as YYYY-MM-DDTHH:MM:SS (e.g. "2025-08-07T15:30:00")
+                    return (new \DateTime())->format('Y-m-d\\TH:i:s');
+                }
+
+                throw new \RuntimeException(
+                    "Unknown placeholder '{$expr}' in argument '{$arg}'"
+                );
+            },
+            $arg
+        );
+    }
 
     /**
      * Central function for error handling in UI5 Browser context
