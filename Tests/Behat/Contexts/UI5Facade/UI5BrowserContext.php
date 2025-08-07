@@ -499,7 +499,7 @@ class UI5BrowserContext extends BehatFormatterContext implements Context
         Assert::assertNotNull($focusedNode, 'No widget is currently focused. Call "I look at" first.');
 
         // Find filter containers only within the focused node
-        $filterContainers = $focusedNode->getNodeElement()->findAll('css', '.sapUiVlt.exfw-Filter, .sapMVBox.exfw-Filter');
+        $filterContainers = $focusedNode->getNodeElement()->findAll('css', '.sapUiVlt.exfw-RangeFilter, .sapUiVlt.exfw-Filter, .sapMVBox.exfw-Filter');
 
         $foundFilters = [];
 
