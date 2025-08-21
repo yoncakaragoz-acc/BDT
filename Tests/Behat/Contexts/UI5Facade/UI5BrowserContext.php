@@ -14,6 +14,7 @@ use exface\Core\Exceptions\RuntimeException;
 use exface\Core\Factories\UiPageFactory;
 use exface\Core\Factories\FormulaFactory;
 use exface\Core\Interfaces\WorkbenchInterface;
+use exface\Core\CommonLogic\Model\Expression;
 use PHPUnit\Framework\Assert;
 use Behat\Behat\Hook\Scope\BeforeScenarioScope;
 use Behat\Behat\Hook\Scope\AfterStepScope;
@@ -562,8 +563,7 @@ class UI5BrowserContext extends BehatFormatterContext implements Context
     {
         //$this->getBrowser()->getFilterByCaption($filterName)->setValue($value);
 
-        // Resolve Now() placeholder before entering the value
-        $value = $this->parseNowArgument($value);
+        $value = $this->parseArgument($value);
 
         // Find the filter by its caption and set the value
         $this
@@ -1542,6 +1542,34 @@ class UI5BrowserContext extends BehatFormatterContext implements Context
         $array = explode($delimiter, $delimitedList);
         $array = array_map('trim', $array);
         return $array;
+    }
+
+    
+
+    /**
+     * Examples:
+     * 
+     * - [#=Now()#]
+     * - [#=GetConfig('exface.Core', 'CONFIG_KEY')#]
+     * - `TestReport [#=Now('yyyyMMdd_HHmmss')#]`
+     * 
+     * @param string $argument
+     * @return string
+     */
+    protected function parseArgument(string $argument) : string
+    {
+        $phs = StringDataType::findPlaceholders($argument);
+        if (! empty($phs)) {
+            $phVals = [];
+            foreach ($phs as $ph) {
+                if (Expression::detectFormula($ph)) {
+                    $formula = FormulaFactory::createFromString($this->getWorkbench(), $ph);
+                    $phVals[$ph] = $formula->evaluate();
+                }
+                $argument = StringDataType::replacePlaceholders($argument, $phVals);
+            }
+        }
+        return $argument;
     }
 
 
